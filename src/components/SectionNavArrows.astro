@@ -1,0 +1,450 @@
+---
+import type { BookIndex } from "../lib/content";
+import { DEFAULT_LANG, t, type Lang } from "../lib/i18n";
+
+interface NavLink {
+    chapterNum: number;
+    slug: string;
+    title: string;
+}
+
+interface Props {
+    previous: NavLink | null;
+    next: NavLink | null;
+    index: BookIndex;
+    lang?: Lang;
+}
+
+const { previous, next, index, lang = DEFAULT_LANG } = Astro.props;
+
+function getSectionUrl(chapterNum: number, slug: string): string {
+    if (slug === "intro") {
+        return `/${lang}/chapter/${chapterNum}.html`;
+    }
+    const chapter = index.chapters.find((c) => c.number === chapterNum);
+    if (slug === "01" && chapter?.introIsMerged) {
+        return `/${lang}/chapter/${chapterNum}.html`;
+    }
+    return `/${lang}/chapter/${chapterNum}/section/${slug}.html`;
+}
+---
+
+<!-- Navigation arrows for section browsing -->
+<nav class="section-nav-arrows" aria-label={t("sectionNavigation", lang)}>
+    {
+        previous && (
+            <a
+                href={getSectionUrl(previous.chapterNum, previous.slug)}
+                class="nav-arrow nav-arrow-prev"
+                aria-label={t("goToPrevious", lang).replace("{title}", previous.title)}
+                data-title={previous.title}
+            >
+                <span class="arrow-icon">‹</span>
+                <span class="arrow-tooltip">{previous.title}</span>
+            </a>
+        )
+    }
+
+    {
+        next && (
+            <a
+                href={getSectionUrl(next.chapterNum, next.slug)}
+                class="nav-arrow nav-arrow-next"
+                aria-label={t("goToNext", lang).replace("{title}", next.title)}
+                data-title={next.title}
+            >
+                <span class="arrow-icon">›</span>
+                <span class="arrow-tooltip">{next.title}</span>
+            </a>
+        )
+    }
+</nav>
+
+<!-- Swipe navigation handler -->
+<div
+    class="swipe-zone"
+    id="swipe-zone"
+    data-prev={previous
+        ? getSectionUrl(previous.chapterNum, previous.slug)
+        : ""}
+    data-next={next ? getSectionUrl(next.chapterNum, next.slug) : ""}
+>
+</div>
+
+<script>
+    // Keyboard navigation
+    function setupKeyboardNav() {
+        const prevArrow = document.querySelector(
+            ".nav-arrow-prev",
+        ) as HTMLAnchorElement | null;
+        const nextArrow = document.querySelector(
+            ".nav-arrow-next",
+        ) as HTMLAnchorElement | null;
+
+        function handleKeydown(e: KeyboardEvent) {
+            // Don't trigger if user is typing in an input
+            if (
+                e.target instanceof HTMLInputElement ||
+                e.target instanceof HTMLTextAreaElement
+            ) {
+                return;
+            }
+
+            if (e.key === "ArrowLeft" && prevArrow) {
+                e.preventDefault();
+                prevArrow.click();
+            } else if (e.key === "ArrowRight" && nextArrow) {
+                e.preventDefault();
+                nextArrow.click();
+            }
+        }
+
+        // Remove existing listener if any (for ViewTransitions)
+        document.removeEventListener("keydown", handleKeydown);
+        document.addEventListener("keydown", handleKeydown);
+    }
+
+    // Swipe navigation
+    function setupSwipeNav() {
+        const swipeZone = document.getElementById("swipe-zone");
+        if (!swipeZone) return;
+
+        const prevUrl = swipeZone.dataset.prev;
+        const nextUrl = swipeZone.dataset.next;
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+
+        const minSwipeDistance = 80;
+        const maxVerticalDistance = 100;
+
+        function handleTouchStart(e: TouchEvent) {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }
+
+        function handleTouchEnd(e: TouchEvent) {
+            touchEndX = e.changedTouches[0].screenX;
+            touchEndY = e.changedTouches[0].screenY;
+            handleSwipe();
+        }
+
+        function handleSwipe() {
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = Math.abs(touchEndY - touchStartY);
+
+            // Only trigger if horizontal swipe and not too much vertical movement
+            if (
+                Math.abs(deltaX) < minSwipeDistance ||
+                deltaY > maxVerticalDistance
+            ) {
+                return;
+            }
+
+            // Check for reduced motion preference
+            const prefersReducedMotion = window.matchMedia(
+                "(prefers-reduced-motion: reduce)",
+            ).matches;
+
+            if (deltaX > 0 && prevUrl) {
+                // Swipe right -> go to previous
+                if (prefersReducedMotion) {
+                    window.location.href = prevUrl;
+                } else {
+                    // Use Astro's navigation if available
+                    if (
+                        typeof window !== "undefined" &&
+                        "navigation" in window
+                    ) {
+                        window.location.href = prevUrl;
+                    } else {
+                        window.location.href = prevUrl;
+                    }
+                }
+            } else if (deltaX < 0 && nextUrl) {
+                // Swipe left -> go to next
+                if (prefersReducedMotion) {
+                    window.location.href = nextUrl;
+                } else {
+                    window.location.href = nextUrl;
+                }
+            }
+        }
+
+        // Attach to document body for full-page swipe detection
+        document.body.addEventListener("touchstart", handleTouchStart, {
+            passive: true,
+        });
+        document.body.addEventListener("touchend", handleTouchEnd, {
+            passive: true,
+        });
+    }
+
+    // Initialize on page load
+    setupKeyboardNav();
+    setupSwipeNav();
+
+    // Re-initialize after ViewTransitions
+    document.addEventListener("astro:page-load", () => {
+        setupKeyboardNav();
+        setupSwipeNav();
+    });
+</script>
+
+<style>
+    .section-nav-arrows {
+        /* Positioned relative to the viewport */
+    }
+
+    .swipe-zone {
+        /* Invisible element just to hold data attributes */
+        display: none;
+    }
+
+    .nav-arrow {
+        position: fixed;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .nav-arrow-prev {
+        left: 0;
+    }
+
+    .nav-arrow-next {
+        right: 0;
+    }
+
+    .arrow-icon {
+        font-size: 48px;
+        font-weight: 300;
+        line-height: 1;
+        color: var(--primary-color);
+        transition: all 0.2s ease;
+    }
+
+    .arrow-tooltip {
+        position: absolute;
+        background: var(--primary-color);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        opacity: 0;
+        pointer-events: none;
+        transition:
+            opacity 0.2s ease,
+            transform 0.2s ease;
+        box-shadow: var(--shadow-lg);
+    }
+
+    .nav-arrow-prev .arrow-tooltip {
+        left: 100%;
+        margin-left: 8px;
+        transform: translateX(-10px);
+    }
+
+    .nav-arrow-next .arrow-tooltip {
+        right: 100%;
+        margin-right: 8px;
+        transform: translateX(10px);
+    }
+
+    .nav-arrow:hover .arrow-tooltip,
+    .nav-arrow:focus .arrow-tooltip {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .nav-arrow:focus {
+        outline: none;
+    }
+
+    .nav-arrow:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 4px;
+        border-radius: 4px;
+    }
+
+    /* Desktop screens (≥769px): sidebar is visible at 280px */
+    /* Main content area starts after sidebar */
+    /* Content max-width is 850px + 120px padding = 970px, centered in main area */
+    @media (min-width: 769px) {
+        .nav-arrow {
+            /* Position relative to viewport, but account for sidebar */
+            /* Main content area = viewport - sidebar = 100vw - 280px */
+            /* Center of main content = sidebar + (main content / 2) = 280px + (100vw - 280px) / 2 */
+            /* Which simplifies to: (100vw + 280px) / 2 = 50vw + 140px */
+        }
+
+        .nav-arrow-prev {
+            /* Left arrow: sidebar width + small gap */
+            left: calc(var(--sidebar-width) + 15px);
+        }
+
+        .nav-arrow-next {
+            right: 15px;
+        }
+    }
+
+    /* Wide screens: Arrows outside content area with prominent styling */
+    /* Need enough space: sidebar(280) + gap(80) + content(970) + gap(80) = 1410px */
+    @media (min-width: 1450px) {
+        .nav-arrow {
+            width: 60px;
+            height: 80px;
+            background: transparent;
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+        }
+
+        .nav-arrow-prev {
+            /* Position to the left of the content area */
+            /* Content center is at: sidebar + (viewport - sidebar) / 2 = 280px + (100vw - 280px) / 2 */
+            /* Content left edge is at: center - content_width/2 = center - 485px */
+            /* Arrow should be: content_left - gap - arrow_width */
+            left: calc(
+                var(--sidebar-width) + (100vw - var(--sidebar-width)) / 2 -
+                    485px - 80px
+            );
+        }
+
+        .nav-arrow-next {
+            /* Position to the right of the content area */
+            /* Content right edge is at: center + content_width/2 = center + 485px */
+            /* Arrow should be at: viewport - (center + 485px + gap) */
+            right: calc((100vw - var(--sidebar-width)) / 2 - 485px - 20px);
+        }
+
+        .arrow-icon {
+            font-size: 56px;
+        }
+
+        .nav-arrow:hover {
+            background: var(--secondary-color);
+            border-color: var(--primary-dark);
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .nav-arrow:hover .arrow-icon {
+            color: var(--primary-dark);
+        }
+    }
+
+    /* Medium desktop screens: Ghost arrows at edge of viewport */
+    @media (min-width: 769px) and (max-width: 1449px) {
+        .nav-arrow {
+            width: 44px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(44, 95, 45, 0.3);
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+        }
+
+        .arrow-icon {
+            font-size: 36px;
+            opacity: 0.5;
+        }
+
+        .nav-arrow:hover {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: var(--primary-color);
+        }
+
+        .nav-arrow:hover .arrow-icon {
+            opacity: 1;
+        }
+    }
+
+    /* Small/mobile screens: Ghost arrows inside content */
+    @media (max-width: 768px) {
+        .nav-arrow {
+            width: 36px;
+            height: 50px;
+            background: transparent;
+            border: 1px solid rgba(44, 95, 45, 0.2);
+            border-radius: 4px;
+        }
+
+        .nav-arrow-prev {
+            left: 5px;
+            border-left: none;
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        .nav-arrow-next {
+            right: 5px;
+            border-right: none;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .arrow-icon {
+            font-size: 28px;
+            opacity: 0.35;
+            color: var(--text-color);
+        }
+
+        .nav-arrow:hover,
+        .nav-arrow:active {
+            background: rgba(44, 95, 45, 0.1);
+        }
+
+        .nav-arrow:hover .arrow-icon,
+        .nav-arrow:active .arrow-icon {
+            opacity: 0.7;
+        }
+
+        /* Hide tooltips on mobile - rely on swipe */
+        .arrow-tooltip {
+            display: none;
+        }
+    }
+
+    /* Respect reduced motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+        .nav-arrow,
+        .arrow-icon,
+        .arrow-tooltip {
+            transition: none;
+        }
+
+        .nav-arrow:hover {
+            transform: translateY(-50%);
+        }
+    }
+
+    /* Hide arrows when chat is open */
+    body.chat-open .section-nav-arrows {
+        display: none;
+    }
+
+    /* Screen reader only announcement */
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+</style>

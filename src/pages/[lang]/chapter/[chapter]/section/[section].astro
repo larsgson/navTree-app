@@ -1,0 +1,158 @@
+---
+import Layout from "../../../../../layouts/Layout.astro";
+import Sidebar from "../../../../../components/Sidebar.jsx";
+import MenuButton from "../../../../../components/MenuButton.astro";
+import ContentRenderer from "../../../../../components/ContentRenderer.astro";
+import SectionNavArrows from "../../../../../components/SectionNavArrows.astro";
+import {
+    loadIndex,
+    loadSection,
+    cleanTitle,
+    getNavigation,
+    flattenSections,
+    findSectionBySlug,
+    formatSlug,
+} from "../../../../../lib/content";
+import { getSupportedLanguages, t, type Lang } from "../../../../../lib/i18n";
+import "../../../../../styles/chapter.css";
+
+export async function getStaticPaths() {
+    const paths: any[] = [];
+
+    for (const lang of await getSupportedLanguages()) {
+        try {
+            const index = await loadIndex(lang);
+            for (const chapter of index.chapters) {
+                const allSections = flattenSections(chapter.sections);
+                for (const section of allSections) {
+                    // Skip intro — handled by chapter index page
+                    if (section.slug === "intro") continue;
+                    // Skip section 01 if merged with intro
+                    if (section.slug === "01" && chapter.introIsMerged) continue;
+
+                    paths.push({
+                        params: {
+                            lang,
+                            chapter: chapter.number.toString(),
+                            section: section.slug,
+                        },
+                        props: {
+                            lang,
+                            chapterNum: chapter.number,
+                            sectionSlug: section.slug,
+                        },
+                    });
+                }
+            }
+        } catch {
+            // Skip languages without content
+        }
+    }
+
+    return paths;
+}
+
+const { lang, chapterNum, sectionSlug } = Astro.props as { lang: Lang; chapterNum: number; sectionSlug: string };
+
+const index = await loadIndex(lang);
+const currentChapter = index.chapters.find((c: any) => c.number === chapterNum);
+const currentSection = currentChapter ? findSectionBySlug(currentChapter.sections, sectionSlug) : null;
+
+if (!currentSection) {
+    return Astro.redirect(`/${lang}/`);
+}
+
+const sectionContent = await loadSection(chapterNum, sectionSlug, lang);
+const { next, previous } = getNavigation(index, chapterNum, sectionSlug);
+const currentPath = `/${lang}/chapter/${chapterNum}/section/${sectionSlug}`;
+const { getSupportedLanguages: getLangs, getLanguageLabel } = await import("../../../../../lib/i18n");
+const languages = (await getLangs()).map(code => ({ code, label: getLanguageLabel(code) }));
+---
+
+<Layout title={`${cleanTitle(currentSection.title)} - ${index.book_title}`} lang={lang}>
+    <Sidebar
+        slot="sidebar"
+        client:load
+        index={index}
+        currentPath={currentPath}
+        lang={lang}
+        languages={languages}
+    />
+
+    <MenuButton slot="menu-button" lang={lang} />
+
+    <div class="chapter-view">
+        <div class="chapter-container">
+            <!-- Breadcrumb navigation -->
+            <div class="breadcrumb">
+                <a href={`/${lang}.html`} class="breadcrumb-link">{t("home", lang)}</a>
+                <span class="breadcrumb-separator">›</span>
+                <a href={`/${lang}/chapter/${chapterNum}.html`} class="breadcrumb-link"
+                    >{t("chapter", lang)} {chapterNum}</a
+                >
+                <span class="breadcrumb-separator">›</span>
+                <span class="breadcrumb-current">{formatSlug(chapterNum, sectionSlug)}</span>
+            </div>
+
+            <!-- Section header -->
+            <header class="chapter-header">
+                <h1 class="chapter-title">{currentSection.title}</h1>
+                {
+                    sectionContent.statistics && (
+                        <div class="chapter-stats">
+                            <span>
+                                {sectionContent.statistics.paragraphs}{" "}
+                                {t("paragraphs", lang)}
+                            </span>
+                            {sectionContent.statistics.tables > 0 && (
+                                <span>
+                                    {sectionContent.statistics.tables} {t("tables", lang)}
+                                </span>
+                            )}
+                            {sectionContent.statistics.images > 0 && (
+                                <span>
+                                    {sectionContent.statistics.images} {t("images", lang)}
+                                </span>
+                            )}
+                        </div>
+                    )
+                }
+            </header>
+
+            <!-- Section content -->
+            <div class="chapter-content">
+                <ContentRenderer
+                    content={sectionContent.content || []}
+                    chapterNum={chapterNum}
+                    sectionId={sectionContent.id}
+                    lang={lang}
+                    bookFolder={index.book_folder}
+                />
+            </div>
+
+            <!-- Footnotes -->
+            {
+                sectionContent.footnotes &&
+                    Object.keys(sectionContent.footnotes).length > 0 && (
+                        <div class="chapter-footnotes">
+                            <h3>{t("footnotes", lang)}</h3>
+                            {Object.entries(sectionContent.footnotes).map(
+                                ([id, text]) => (
+                                    <div class="footnote" id={`footnote-${id}`}>
+                                        <sup>{id}</sup> {text}
+                                    </div>
+                                ),
+                            )}
+                        </div>
+                    )
+            }
+        </div>
+    </div>
+
+    <!-- Section navigation arrows -->
+    <SectionNavArrows previous={previous} next={next} index={index} lang={lang} />
+</Layout>
+
+<script define:vars={{ editSectionId: sectionContent.id, editGithubClientId: "Iv23li0h0AgXaIag3HiI", editLang: lang, editBookFolder: index.book_folder }}>
+  window.__editModeProps = { sectionId: editSectionId, githubClientId: editGithubClientId, lang: editLang, bookFolder: editBookFolder };
+</script>

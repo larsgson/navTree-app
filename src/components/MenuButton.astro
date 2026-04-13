@@ -1,0 +1,57 @@
+---
+// Menu button component for mobile sidebar toggle
+import { t, DEFAULT_LANG, type Lang } from "../lib/i18n";
+
+interface Props {
+    lang?: Lang;
+}
+
+const { lang = DEFAULT_LANG } = Astro.props;
+---
+
+<div class="menu-button-container">
+    <button class="menu-button" id="menu-toggle" aria-label={t("toggleMenu", lang)}>
+        ☰
+    </button>
+</div>
+
+<script>
+    // Function to attach click listener to menu button
+    function attachMenuButtonListener() {
+        const menuBtn = document.getElementById("menu-toggle");
+        if (menuBtn && !menuBtn.dataset.listenerAttached) {
+            menuBtn.dataset.listenerAttached = "true";
+            menuBtn.addEventListener(
+                "click",
+                (e) => {
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    window.dispatchEvent(new CustomEvent("toggle-sidebar"));
+                },
+                { capture: true },
+            );
+        }
+    }
+
+    // Function to update menu button visibility based on sidebar state
+    function updateMenuButtonVisibility(isOpen) {
+        const container = document.querySelector(".menu-button-container");
+        if (container) {
+            container.style.visibility = isOpen ? "hidden" : "visible";
+        }
+    }
+
+    // Attach on initial load
+    attachMenuButtonListener();
+
+    // Register listeners only once (persist across navigations)
+    if (!window.__menuButtonPageLoadRegistered) {
+        window.__menuButtonPageLoadRegistered = true;
+        document.addEventListener("astro:page-load", attachMenuButtonListener);
+
+        // Listen to sidebar state changes
+        window.addEventListener("sidebar-state-changed", (e) => {
+            updateMenuButtonVisibility(e.detail.isOpen);
+        });
+    }
+</script>

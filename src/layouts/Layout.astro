@@ -1,0 +1,191 @@
+---
+import ChatDrawer from "../components/ChatDrawer.jsx";
+import "../styles/global.css";
+import { getHtmlLang, t, DEFAULT_LANG, type Lang } from "../lib/i18n";
+
+interface Props {
+    title: string;
+    chapter?: number;
+    section?: number;
+    lang?: Lang;
+}
+
+const { title, chapter, section, lang = DEFAULT_LANG } = Astro.props;
+const currentPath = Astro.url.pathname;
+const htmlLang = getHtmlLang(lang);
+---
+
+<!doctype html>
+<html lang={htmlLang}>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta
+            name="description"
+            content={t("metaDescription", lang)}
+        />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <title>{title}</title>
+        <script>
+            import "../lib/capacitor-init.js";
+        </script>
+    </head>
+    <body>
+        <slot name="menu-button" />
+
+        <!-- Floating mobile chat button (same level as hamburger for z-index/safe-area) -->
+        <div class="mobile-chat-button-container">
+            <button
+                class="mobile-chat-button"
+                id="mobile-chat-toggle"
+                aria-label={t("openChat", lang)}
+                title={t("askTheHandbook", lang)}
+            >
+                💬
+                <span class="mobile-sources-badge" id="mobile-sources-badge"
+                ></span>
+            </button>
+        </div>
+
+        <div class="app">
+            <slot name="sidebar" />
+
+            <main class="main-content">
+                <!-- Page content container -->
+                <div class="page-content">
+                    <slot />
+                </div>
+
+                <!-- Chat container (hidden by default, shown when chat-open class on body) -->
+                <div class="chat-content">
+                    <ChatDrawer
+                        client:load
+                        currentPath={currentPath}
+                    />
+                </div>
+            </main>
+        </div>
+
+        <script>
+            // Prevent duplicate event listener registration with ViewTransitions
+            if (!window.__layoutListenersRegistered) {
+                window.__layoutListenersRegistered = true;
+
+                // Handle chat panel toggle
+                const handleChatToggle = () => {
+                    document.body.classList.toggle("chat-open");
+                    const isOpen =
+                        document.body.classList.contains("chat-open");
+                    sessionStorage.setItem(
+                        "chat-panel-open",
+                        isOpen ? "true" : "false",
+                    );
+                    const chatContent = document.querySelector(".chat-content");
+                    const chatDisplay = chatContent ? getComputedStyle(chatContent).display : "null";
+                    const sidebarOpen = document.body.classList.contains("sidebar-open");
+                    console.log("toggle-chat: open=" + isOpen + ", display=" + chatDisplay + ", height=" + (chatContent ? chatContent.offsetHeight : 0) + ", sidebarOpen=" + sidebarOpen);
+                };
+
+                window.addEventListener("toggle-chat", handleChatToggle);
+
+                // Update mobile chat button visibility based on sources
+                window.__updateMobileChatButton = (e) => {
+                    const button =
+                        document.getElementById("mobile-chat-toggle");
+                    const badge = document.getElementById(
+                        "mobile-sources-badge",
+                    );
+
+                    if (!button || !badge) return;
+
+                    // Get sources from event detail or sessionStorage
+                    let sources = [];
+                    if (e?.detail?.sources) {
+                        sources = e.detail.sources;
+                    } else {
+                        const saved =
+                            sessionStorage.getItem("relevant-sources");
+                        if (saved) {
+                            try {
+                                sources = JSON.parse(saved);
+                            } catch (err) {
+                                sources = [];
+                            }
+                        }
+                    }
+
+                    if (sources.length > 0) {
+                        button.classList.add("has-sources");
+                        badge.textContent = sources.length.toString();
+                    } else {
+                        button.classList.remove("has-sources");
+                        badge.textContent = "";
+                    }
+                };
+
+                // Listen for sources updates
+                window.addEventListener(
+                    "sources-updated",
+                    window.__updateMobileChatButton,
+                );
+            }
+
+            // Mobile chat button click handler - needs re-attachment after ViewTransitions
+            function attachMobileChatButtonListener() {
+                const btn = document.getElementById("mobile-chat-toggle");
+                if (btn && !btn.dataset.listenerAttached) {
+                    btn.dataset.listenerAttached = "true";
+                    btn.addEventListener("click", () => {
+                        console.log("mobile chat button clicked");
+                        window.dispatchEvent(
+                            new CustomEvent("toggle-chat"),
+                        );
+                    });
+                }
+            }
+
+            // Attach on initial load
+            attachMobileChatButtonListener();
+
+            // Handle citation highlighting and restore chat state after page navigation
+            document.addEventListener("astro:page-load", () => {
+                // Re-attach mobile chat button listener after navigation
+                attachMobileChatButtonListener();
+
+                // Update mobile chat button on page load
+                if (window.__updateMobileChatButton) {
+                    window.__updateMobileChatButton();
+                }
+                // Restore chat-open state
+                const wasOpen =
+                    sessionStorage.getItem("chat-panel-open") === "true";
+                if (wasOpen) {
+                    document.body.classList.add("chat-open");
+                } else {
+                    document.body.classList.remove("chat-open");
+                }
+
+                // Handle citation highlighting
+                const hash = window.location.hash;
+                if (hash) {
+                    const el = document.querySelector(hash);
+                    if (el) {
+                        // Small delay to ensure content is rendered
+                        setTimeout(() => {
+                            el.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                            });
+                            el.classList.add("citation-highlight");
+
+                            // Remove highlight after 3 seconds
+                            setTimeout(() => {
+                                el.classList.remove("citation-highlight");
+                            }, 3000);
+                        }, 100);
+                    }
+                }
+            });
+        </script>
+    </body>
+</html>

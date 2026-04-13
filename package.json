@@ -1,0 +1,39 @@
+{
+  "name": "navtree-app",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "generate-image-index": "node scripts/generate-image-index.js",
+    "prebuild": "bash scripts/convert-pictures.sh && bash scripts/download-models.sh",
+    "build": "node scripts/generate-image-index.js && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "cap:sync": "astro build && npx cap sync",
+    "cap:open": "npx cap open android",
+    "cap:run": "npx cap run android"
+  },
+  "dependencies": {
+    "@astrojs/react": "^4.2.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.3.0",
+    "@huggingface/transformers": "^4.0.1",
+    "astro": "^5.2.0",
+    "flexsearch": "^0.8.212",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "typescript": "^6.0.2"
+  }
+}

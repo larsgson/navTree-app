@@ -1,0 +1,412 @@
+/* Reset and global styles */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --primary-color: #2c5f2d;
+    --primary-dark: #1e4620;
+    --primary-light: #4a8f4c;
+    --secondary-color: #f8f9fa;
+    --text-color: #333;
+    --text-light: #666;
+    --border-color: #ddd;
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --sidebar-width: 280px;
+    --header-height: 60px;
+}
+
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    margin: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: var(--text-color);
+    background-color: #fff;
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+p {
+    margin: 0;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Remove default list styles */
+ul,
+ol {
+    list-style: none;
+}
+
+/* Accessibility */
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Selection color */
+::selection {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+::-moz-selection {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Ensure no horizontal overflow */
+body {
+    overflow-x: hidden;
+}
+
+/* Prevent body scroll when sidebar is open on mobile */
+body.sidebar-open {
+    overflow: hidden;
+}
+
+/* App layout */
+.app {
+    display: flex;
+    min-height: 100vh;
+}
+
+.main-content {
+    flex: 1;
+    width: 100%;
+    min-height: 100vh;
+    background-color: #fff;
+    transition: margin-left 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+
+/* Page content and chat content containers */
+.page-content {
+    display: block;
+    flex: 1;
+}
+
+.chat-content {
+    display: none;
+    flex: 1;
+    height: 100%;
+    max-height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+body.chat-open .chat-content {
+    pointer-events: auto;
+}
+
+/* When chat is open */
+body.chat-open .page-content {
+    display: none;
+}
+
+body.chat-open .main-content {
+    min-height: 0;
+    height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+body.chat-open .chat-content {
+    display: flex;
+}
+
+/* Menu button for mobile - create safe click area */
+.menu-button-container {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: env(safe-area-inset-left, 0px);
+    width: 74px;
+    height: 74px;
+    z-index: 9999;
+    pointer-events: none;
+    /* Ensure this creates its own stacking context at the top */
+    isolation: isolate;
+    /* CRITICAL: This preserves z-index during Astro ViewTransitions */
+    view-transition-name: menu-button;
+}
+
+.menu-button {
+    position: relative;
+    top: 15px;
+    left: 15px;
+    z-index: 9999;
+    pointer-events: auto;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.menu-button:hover {
+    background-color: var(--primary-dark);
+    transform: scale(1.05);
+}
+
+.menu-button:active {
+    transform: scale(0.95);
+}
+
+/* Mobile floating chat button container */
+.mobile-chat-button-container {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 15px);
+    right: calc(env(safe-area-inset-right, 0px) + 15px);
+    z-index: 9999;
+}
+
+.mobile-chat-button {
+    display: none;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    align-items: center;
+    justify-content: center;
+    transition:
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.mobile-chat-button:hover {
+    background-color: var(--primary-dark);
+    transform: scale(1.05);
+}
+
+.mobile-chat-button:active {
+    transform: scale(0.95);
+}
+
+/* Only show on mobile when sources are active */
+@media (max-width: 768px) {
+    .mobile-chat-button.has-sources {
+        display: flex;
+        background-color: #ffd700;
+        color: #1e4620;
+    }
+
+    .mobile-chat-button.has-sources:hover {
+        background-color: #ffc000;
+    }
+
+    /* Hide when chat is open */
+    body.chat-open .mobile-chat-button {
+        display: none;
+    }
+}
+
+/* Badge for source count */
+.mobile-sources-badge {
+    display: none;
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #1e4620;
+    color: #ffd700;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+}
+
+.mobile-chat-button.has-sources .mobile-sources-badge {
+    display: flex;
+}
+
+/* Loading states */
+.loading-container,
+.chapter-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.spinner {
+    border: 4px solid var(--secondary-color);
+    border-top: 4px solid var(--primary-color);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-container p,
+.chapter-loading p {
+    margin-top: 20px;
+    color: var(--text-light);
+    font-size: 16px;
+}
+
+/* Citation highlight animation */
+.citation-highlight {
+    background-color: rgba(44, 95, 45, 0.2);
+    border-left: 4px solid var(--primary-color);
+    padding-left: 12px;
+    margin-left: -16px;
+    transition: background-color 0.5s ease;
+}
+
+/* Responsive Design */
+@media (min-width: 769px) {
+    .menu-button-container,
+    .menu-button,
+    .mobile-chat-button-container {
+        display: none;
+    }
+
+    .main-content {
+        margin-left: var(--sidebar-width);
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 0;
+    }
+}
+
+/* Print styles */
+@media print {
+    .menu-button,
+    .sidebar,
+    .chat-drawer {
+        display: none !important;
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+    }
+}
+
+/* View transition animations */
+::view-transition-old(main-content) {
+    animation: fade-out 0.2s ease-out;
+}
+
+::view-transition-new(main-content) {
+    animation: fade-in 0.2s ease-in;
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}

@@ -1,0 +1,71 @@
+apply plugin: 'com.android.application'
+
+import groovy.json.JsonSlurper
+
+// Read app identity from app.config.json (shared with Astro/Capacitor)
+def appConfigFile = file("${rootProject.projectDir}/../app.config.json")
+def appConfig = new JsonSlurper().parseText(appConfigFile.text)
+def configAppId = appConfig.appId ?: "com.example.mybook"
+def configAppName = appConfig.appName ?: "NavTree App"
+
+android {
+    namespace = configAppId
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId configAppId
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            // Prevent AAPT from compressing large JSON files (embeddings) which
+            // causes Capacitor's local server to serve truncated responses
+            noCompress 'json'
+        }
+
+        // Inject app name and ID into resources (overrides strings.xml values)
+        resValue "string", "app_name", configAppName
+        resValue "string", "title_activity_main", configAppName
+        resValue "string", "package_name", configAppId
+        resValue "string", "custom_url_scheme", configAppId
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

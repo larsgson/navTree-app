@@ -1,0 +1,415 @@
+---
+import type { ImageOverrides } from "../lib/content";
+import { DEFAULT_LANG, type Lang } from "../lib/i18n";
+import appConfig from "../lib/appConfig";
+import imageOverridesData from "../data/image-overrides.json";
+
+interface Props {
+    content: any[];
+    chapterNum: string | number;
+    sectionId?: string;
+    lang?: Lang;
+    bookFolder?: string;
+}
+
+const { content, chapterNum, sectionId, lang = DEFAULT_LANG, bookFolder = appConfig.defaultBookFolder } = Astro.props;
+const imageOverrides = imageOverridesData as ImageOverrides;
+
+const getTextAlign = (alignment: string | undefined) => {
+    if (!alignment) return "left";
+    if (alignment.includes("CENTER")) return "center";
+    if (alignment.includes("RIGHT")) return "right";
+    if (alignment.includes("JUSTIFY")) return "justify";
+    return "left";
+};
+
+const isHeading = (item: any) => {
+    return (
+        item.runs &&
+        item.runs.some(
+            (run: any) => run.bold && run.font_size && run.font_size >= 12,
+        )
+    );
+};
+
+const getImagePath = (img: any, chapterNum: string | number, blockIndex?: number) => {
+    // Check for image overrides
+    if (sectionId && blockIndex !== undefined && img.path) {
+        const override = imageOverrides.overrides.find(
+            (o) => o.sectionId === sectionId && o.blockIndex === blockIndex && o.originalPath === img.path
+        );
+        if (override) {
+            return `/pictures/${lang}/${bookFolder}/${override.correctedPath.replace(/^pictures\//, "").replace(/\.png$/, ".webp")}`;
+        }
+    }
+
+    // Images are stored as PNGs in source but served as WebP (converted during build)
+    if (img.path) {
+        return `/pictures/${lang}/${bookFolder}/${img.path.replace(/^pictures\//, "").replace(/\.png$/, ".webp")}`;
+    }
+    // Legacy format fallback
+    const paddedChapter = String(chapterNum).padStart(2, "0");
+    if (img.filename) {
+        return `/book_content_json/chapter_${paddedChapter}/pictures/${img.filename}`;
+    }
+    return "";
+};
+// Pre-process: merge paragraphs that are word-wrap artifacts from the source document.
+// A paragraph is a continuation if the previous paragraph doesn't end with terminal
+// punctuation (. ? ! " : ; ) ), meaning the sentence was broken at a line-wrap boundary.
+const mergedContent: any[] = [];
+for (const item of content) {
+    if (item.type === "paragraph" && item.text && mergedContent.length > 0) {
+        const prev = mergedContent[mergedContent.length - 1];
+        if (prev.type === "paragraph" && prev.text) {
+            const prevTrimmed = prev.text.trimEnd();
+            const endsWithTerminal = /[.?!":;)\u201d]$/.test(prevTrimmed);
+            const prevIsHeading =
+                prevTrimmed === prevTrimmed.toUpperCase() &&
+                prevTrimmed.length > 3;
+            // Starts with quote + lowercase = mid-sentence (e.g., "no" response...)
+            const startsQuoteLower = /^["\u201c\u201d][a-z]/.test(item.text);
+            if ((!endsWithTerminal && !prevIsHeading) || startsQuoteLower) {
+                prev.text = prevTrimmed + " " + item.text;
+                continue;
+            }
+        }
+    }
+    mergedContent.push({ ...item });
+}
+---
+
+{
+    mergedContent.map((item, index) => {
+        if (item.type === "paragraph") {
+            const isEmpty = !item.text || item.text.trim() === "";
+
+            if (isEmpty && (!item.images || item.images.length === 0)) {
+                return <div class="paragraph-spacer" id={`p-${index}`} />;
+            }
+
+            return (
+                <div class="content-paragraph" id={`p-${index}`}>
+                    <p
+                        class={`paragraph ${isHeading(item) ? "heading" : ""}`}
+                        style={`text-align: ${getTextAlign(item.alignment)}`}
+                    >
+                        {item.runs && item.runs.length > 0 ? (
+                            item.runs.map((run: any) => {
+                                let className = "";
+                                if (run.bold) className += " bold";
+                                if (run.italic) className += " italic";
+                                if (run.underline) className += " underline";
+
+                                return (
+                                    <span
+                                        class={className.trim()}
+                                        style={
+                                            run.font_size
+                                                ? `font-size: ${run.font_size}pt`
+                                                : ""
+                                        }
+                                    >
+                                        {run.text}
+                                    </span>
+                                );
+                            })
+                        ) : (
+                            <span>{item.text}</span>
+                        )}
+                        {item.footnotes &&
+                            item.footnotes.map((fn: any) => (
+                                <sup>
+                                    <a
+                                        href={`#footnote-${fn.id}`}
+                                        class="footnote-ref"
+                                    >
+                                        {fn.id}
+                                    </a>
+                                </sup>
+                            ))}
+                    </p>
+
+                    {item.images && item.images.length > 0 && (
+                        <div class="paragraph-images">
+                            {item.images.map((img: any) => (
+                                <div class="image-container">
+                                    <img
+                                        src={getImagePath(img, chapterNum)}
+                                        alt={
+                                            img.description ||
+                                            `Image ${img.index}`
+                                        }
+                                        class="chapter-image"
+                                        loading="lazy"
+                                    />
+                                    {img.description && (
+                                        <p class="image-caption">
+                                            {img.description}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        if (item.type === "table") {
+            // Normalize table data: support both formats
+            // Format 1 (legacy): item.cells = 2D array, item.rows = number
+            // Format 2 (new): item.rows = array of {cells: [{text: "..."}]}
+            let tableRows: any[][] = [];
+
+            if (item.cells && item.cells.length > 0) {
+                // Legacy format: item.cells is a 2D array
+                tableRows = item.cells;
+            } else if (Array.isArray(item.rows) && item.rows.length > 0) {
+                // New format: item.rows is an array of row objects
+                tableRows = item.rows.map((row: any) =>
+                    (row.cells || []).map((cell: any) => cell),
+                );
+            }
+
+            if (tableRows.length === 0) return null;
+
+            // Expand cells that contain newline-separated values into proper rows.
+            // Two cases:
+            // A) Single-row: each cell has header as first line, data on subsequent lines
+            // B) Multi-row: header row + data rows with \n values
+            const hasNewlineData = tableRows.some((row) =>
+                row.some((cell: any) => cell.text && cell.text.includes("\n")),
+            );
+
+            if (hasNewlineData) {
+                if (tableRows.length === 1) {
+                    // Single-row table: first line of each cell is the header
+                    const row = tableRows[0];
+                    const splitCells = row.map((cell: any) => {
+                        const text = cell.text || "";
+                        return text
+                            .split("\n")
+                            .map((line: string) => line.trim())
+                            .filter((line: string) => line.length > 0);
+                    });
+                    const headerRow = splitCells.map((lines: string[]) => ({
+                        text: lines[0] || "",
+                    }));
+                    const maxLines = Math.max(
+                        ...splitCells.map((lines: string[]) => lines.length),
+                        1,
+                    );
+                    const expandedRows = [headerRow];
+                    for (let i = 1; i < maxLines; i++) {
+                        expandedRows.push(
+                            splitCells.map((lines: string[]) => ({
+                                text: lines[i] || "",
+                            })),
+                        );
+                    }
+                    tableRows = expandedRows;
+                } else {
+                    // Multi-row: keep first row as header, expand data rows
+                    const dataRows = tableRows.slice(1);
+                    const needsExpansion = dataRows.some((row) =>
+                        row.some(
+                            (cell: any) =>
+                                cell.text && cell.text.includes("\n"),
+                        ),
+                    );
+                    if (needsExpansion) {
+                        const expandedRows = [tableRows[0]];
+                        for (const row of dataRows) {
+                            const splitCells = row.map((cell: any) => {
+                                const text = cell.text || "";
+                                return text
+                                    .split("\n")
+                                    .map((line: string) => line.trim())
+                                    .filter((line: string) => line.length > 0);
+                            });
+                            const maxLines = Math.max(
+                                ...splitCells.map(
+                                    (lines: string[]) => lines.length,
+                                ),
+                                1,
+                            );
+                            for (let i = 0; i < maxLines; i++) {
+                                expandedRows.push(
+                                    splitCells.map((lines: string[]) => ({
+                                        text: lines[i] || "",
+                                    })),
+                                );
+                            }
+                        }
+                        tableRows = expandedRows;
+                    }
+                }
+            }
+
+            const hasHeader = tableRows.length > 1;
+
+            return (
+                <div class="content-table" id={`p-${index}`}>
+                    <div class="table-wrapper">
+                        <table class="chapter-table">
+                            <tbody>
+                                {tableRows.map((row: any[], rowIdx: number) => (
+                                    <tr
+                                        class={
+                                            rowIdx === 0 && hasHeader
+                                                ? "table-header-row"
+                                                : ""
+                                        }
+                                    >
+                                        {row.map(
+                                            (cell: any, cellIdx: number) => {
+                                                // Skip merged cells
+                                                if (
+                                                    cell.merged_from &&
+                                                    (cell.merged_from[0] !==
+                                                        cell.row ||
+                                                        cell.merged_from[1] !==
+                                                            cell.col)
+                                                ) {
+                                                    return null;
+                                                }
+
+                                                const CellTag =
+                                                    rowIdx === 0 && hasHeader
+                                                        ? "th"
+                                                        : "td";
+
+                                                return (
+                                                    <CellTag
+                                                        class={
+                                                            cell.text
+                                                                ? ""
+                                                                : "empty-cell"
+                                                        }
+                                                    >
+                                                        {cell.paragraphs &&
+                                                        cell.paragraphs.length >
+                                                            0
+                                                            ? cell.paragraphs.map(
+                                                                  (
+                                                                      para: any,
+                                                                  ) => (
+                                                                      <div class="table-cell-paragraph">
+                                                                          {para.runs &&
+                                                                          para
+                                                                              .runs
+                                                                              .length >
+                                                                              0
+                                                                              ? para.runs.map(
+                                                                                    (
+                                                                                        run: any,
+                                                                                    ) => {
+                                                                                        let className =
+                                                                                            "";
+                                                                                        if (
+                                                                                            run.bold
+                                                                                        )
+                                                                                            className +=
+                                                                                                " bold";
+                                                                                        if (
+                                                                                            run.italic
+                                                                                        )
+                                                                                            className +=
+                                                                                                " italic";
+                                                                                        if (
+                                                                                            run.underline
+                                                                                        )
+                                                                                            className +=
+                                                                                                " underline";
+
+                                                                                        return (
+                                                                                            <span
+                                                                                                class={className.trim()}
+                                                                                            >
+                                                                                                {
+                                                                                                    run.text
+                                                                                                }
+                                                                                            </span>
+                                                                                        );
+                                                                                    },
+                                                                                )
+                                                                              : para.text}
+                                                                      </div>
+                                                                  ),
+                                                              )
+                                                            : cell.text}
+                                                    </CellTag>
+                                                );
+                                            },
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {item.expanded && (
+                        <p class="table-note">
+                            <em>
+                                Note: This table was automatically expanded from{" "}
+                                {item.original_rows} original row(s)
+                            </em>
+                        </p>
+                    )}
+                </div>
+            );
+        }
+
+        if (item.type === "image") {
+            return (
+                <div class="content-image" id={`p-${index}`}>
+                    <div class="image-container">
+                        <img
+                            src={getImagePath(item, chapterNum, index)}
+                            alt={item.description || `Image ${item.index}`}
+                            class="chapter-image"
+                            data-block-index={index}
+                            data-original-path={item.path || ""}
+                            loading="lazy"
+                        />
+                        {item.description && (
+                            <p class="image-caption">{item.description}</p>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        if (item.type === "table_cell_header") {
+            // Split header from body if text contains newlines
+            const text = item.text || "";
+            const newlineIdx = text.indexOf("\n");
+            if (newlineIdx !== -1) {
+                const headerText = text.substring(0, newlineIdx).trim();
+                const bodyText = text.substring(newlineIdx + 1).trim();
+                return (
+                    <div id={`p-${index}`}>
+                        <div class="content-table-cell-header">
+                            <div class="table-cell-header-text">
+                                {headerText}
+                            </div>
+                        </div>
+                        {bodyText && (
+                            <div class="content-paragraph">
+                                <p class="paragraph">{bodyText}</p>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+            return (
+                <div class="content-table-cell-header" id={`p-${index}`}>
+                    <div class="table-cell-header-text">{item.text}</div>
+                </div>
+            );
+        }
+
+        return null;
+    })
+}

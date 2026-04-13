@@ -1,0 +1,60 @@
+---
+// Root page renders the default language homepage (no redirect needed for mobile app)
+import Layout from "../layouts/Layout.astro";
+import Sidebar from "../components/Sidebar.jsx";
+import MenuButton from "../components/MenuButton.astro";
+import { loadIndex, cleanTitle } from "../lib/content";
+import { DEFAULT_LANG, getSupportedLanguages, t, getLanguageLabel, type Lang } from "../lib/i18n";
+import "../styles/home.css";
+
+const lang: Lang = DEFAULT_LANG;
+const index = await loadIndex(lang);
+const langs = await getSupportedLanguages();
+const languages = langs.map(code => ({ code, label: getLanguageLabel(code) }));
+---
+
+<Layout title={index?.book_title || ""} lang={lang}>
+    <Sidebar
+        slot="sidebar"
+        client:load
+        index={index}
+        currentPath={`/${lang}/`}
+        lang={lang}
+        languages={languages}
+    />
+
+    <MenuButton slot="menu-button" lang={lang} />
+
+    <div class="home-page">
+        <header class="home-header">
+            <h1>{index?.book_title}</h1>
+            <p class="subtitle">
+                {t("subtitle", lang)}
+            </p>
+            <div class="stats">
+                <span>{index?.total_chapters} {t("chapters", lang)}</span>
+                <span>•</span>
+                <span>{index?.total_sections} {t("sections", lang)}</span>
+            </div>
+        </header>
+
+        <div class="chapters-grid">
+            {
+                index?.chapters.map((chapter: any) => (
+                    <a href={`/${lang}/chapter/${chapter.number}.html`} class="chapter-card">
+                        <div class="chapter-card-number">
+                            {t("chapter", lang)} {chapter.number}
+                        </div>
+                        <div class="chapter-card-title">
+                            {cleanTitle(chapter.title)}
+                        </div>
+                        <div class="chapter-card-stats">
+                            {chapter.total_sections} {t("sections", lang)}
+                        </div>
+                        <div class="chapter-card-arrow">→</div>
+                    </a>
+                ))
+            }
+        </div>
+    </div>
+</Layout>

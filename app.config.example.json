@@ -1,0 +1,24 @@
+{
+  "appId": "com.example.mybook",
+  "appName": "My Book Reader",
+  "defaultLanguage": "eng",
+  "defaultBookFolder": "mybook",
+  "android": {
+    "packageName": "com.example.mybook"
+  },
+  "branding": {
+    "subtitle": "A comprehensive reference guide",
+    "metaDescription": "My Book Reader - Mobile reference guide"
+  },
+  "search": {
+    "askLabel": "Ask the Book",
+    "searchingLabel": "Searching the book...",
+    "noResultsLabel": "No relevant sections found. Try using different keywords.",
+    "foundSectionsLabel": "Found {count} relevant section(s):"
+  },
+  "examples": {
+    "question1": "What is covered in chapter 1?",
+    "question2": "How do I get started?",
+    "question3": "What are the key concepts?"
+  }
+}
