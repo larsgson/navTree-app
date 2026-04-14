@@ -18,12 +18,13 @@ BRANCH="main"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "Downloading ${REPO}@${BRANCH}..."
-curl -sL "$ARCHIVE_URL" | tar -xz -C "$TMPDIR"
+gh api "repos/${REPO}/tarball/${BRANCH}" > "$TMPDIR/archive.tar.gz"
+tar -xz -C "$TMPDIR" -f "$TMPDIR/archive.tar.gz"
+rm "$TMPDIR/archive.tar.gz"
 
 # Find extracted directory (e.g. animal-health-main)
 EXTRACTED=$(ls "$TMPDIR")
